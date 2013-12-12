@@ -11,6 +11,7 @@
 #define PIN_SDIN  4
 #define PIN_SCLK  3
 #define PIN_LIGHT 2
+#define PIN_LED   13
 
 #define LCD_C     LOW
 #define LCD_D     HIGH
@@ -21,7 +22,7 @@
 static const byte ASCII[][5] =
 {
  {0x00, 0x00, 0x00, 0x00, 0x00} // 20  
-,{0x00, 0x00, 0x5f, 0x00, 0x00} // 21 !
+,{0x00, 0x00, 0x5f, 0x00, 0x00} // 21 !s
 ,{0x00, 0x07, 0x00, 0x07, 0x00} // 22 "
 ,{0x14, 0x7f, 0x14, 0x7f, 0x14} // 23 #
 ,{0x24, 0x2a, 0x7f, 0x2a, 0x12} // 24 $
@@ -136,7 +137,7 @@ void LcdString(char *characters)
   }
 }
 
-void LcdInitialise(void)
+void LcdInit(void)
 {
   pinMode(PIN_SCE, OUTPUT);
   pinMode(PIN_RESET, OUTPUT);
@@ -147,40 +148,44 @@ void LcdInitialise(void)
   digitalWrite(PIN_LIGHT, LOW);  // Light on
   digitalWrite(PIN_RESET, LOW);
   digitalWrite(PIN_RESET, HIGH);
-  LcdWrite(LCD_C, 0x21 );  // LCD Extended Commands.. 
-  LcdWrite(LCD_C, 0x04 );  // Set Temp coefficent. //0x04
-
+  LcdWrite(LCD_C, 0x21 );  // LCD Extended Commands..
+  LcdWrite(LCD_C, 0b00000110 );  // Set Temp coefficent. //0x04 0b00000100
+  
   // Not trivial. LCD bias mode 1:48 as default but need to set correct contrast.
   LcdWrite(LCD_C, 0b00010011 );
-  // in the manual last 3 bit:
-  // BS2  BS1  BS0   n    RECOMMENDED MUX RATE
-  //------------------------------------------
-  // 0     0    0    7    1:100
-  // 0     0    1    6    1:80
-  // 0     1    0    5    1:65/1:65
-  // 0     1    1    4    1:48
-  // 1     0    0    3    1:40/1:34
-  // 1     0    1    2    1:24
-  // 1     1    0    1    1:18/1:16
-  // 1     1    1    0    1
   
+/* in the manual last 3 bit:
+   BS2 | BS1 | BS0 |  n  |  RECOMMENDED MUX RATE
+  ----------------------------------------------
+   0   |  0  |  0  |  7  |  1:100
+   0   |  0  |  1  |  6  |  1:80
+   0   |  1  |  0  |  5  |  1:65/1:65
+   0   |  1  |  1  |  4  |  1:48
+   1   |  0  |  0  |  3  |  1:40/1:34
+   1   |  0  |  1  |  2  |  1:24
+   1   |  1  |  0  |  1  |  1:18/1:16
+   1   |  1  |  1  |  0  |  1
+*/
+
   // Not trivial. Set LCD Vop (Contrast)
   LcdWrite(LCD_C, 0b10111111 );
-  // in the manual command:
-  // Set VOP | 1 | VOP6 | VOP5 | VOP4 | VOP3 | VOP2 | VOP1 | VOP0 | write VOP to register
-  //
-  // SYMBOL  | BIAS VOLTAGES   | BIAS VOLTAGE FOR 1⁄8 BIAS
-  //------------------------------------------------------
-  // V1      | V lcd           | V lcd
-  // V2      | (n + 3)/(n + 4) | 7/8*(V lcd)
-  // V3      | (n + 2)/(n + 4) | 6/8*(V lcd)
-  // V4      | 2/(n + 4)       | 2/8*(V lcd)
-  // V5      | 1/(n + 4)       | 1/8*(V lcd)
-  // V6      | Vss             | Vss
-  // in this example, i think: LcdWrite(LCD_C, 0b10111111 ) = (0 + 1/8 + 2/8 + 6/8 + 7/8 + 1 )*(V lcd) = 3*(V lcd)
-  // if use default value 0xB1 or 0b10110001 then need change BIAS mode (see above)
   
-  LcdWrite(LCD_C, 0x0C );  // LCD in normal mode.
+/* in the manual command:
+   Set VOP | 1 | VOP6 | VOP5 | VOP4 | VOP3 | VOP2 | VOP1 | VOP0 | write VOP to register
+  
+   SYMBOL  | BIAS VOLTAGES   | BIAS VOLTAGE FOR 1⁄8 BIAS
+  ------------------------------------------------------
+   V1      | V lcd           | V lcd
+   V2      | (n + 3)/(n + 4) | 7/8*(V lcd)
+   V3      | (n + 2)/(n + 4) | 6/8*(V lcd)
+   V4      | 2/(n + 4)       | 2/8*(V lcd)
+   V5      | 1/(n + 4)       | 1/8*(V lcd)
+   V6      | Vss             | Vss
+   in this example, i think: LcdWrite(LCD_C, 0b10111111 ) = (0 + 1/8 + 2/8 + 6/8 + 7/8 + 1 )*(V lcd) = 3*(V lcd)
+   if use default value 0xB1 or 0b10110001 then need change BIAS mode (see above)
+*/
+  
+  LcdWrite(LCD_C, 0x0C );  // LCD in normal mode. 0b00001100
   LcdWrite(LCD_C, 0x20 );
   LcdWrite(LCD_C, 0x0C );
 }
@@ -197,21 +202,27 @@ void LcdClear(void)
 {
   for (int index = 0; index < LCD_X * LCD_Y / 8; index++)
   {
-    LcdWrite(LCD_D, 0xFF);
+    LcdWrite(LCD_D, random(0x00,0xFF));
   }
 }
 
 void setup(void)
 {
-  LcdInitialise();
+  randomSeed(analogRead(0));
+  LcdInit();
   LcdClear();
-  LcdString("Hello World!");
+  digitalWrite(PIN_LIGHT, LOW);
 }
 
 // the loop routine runs over and over again forever:
 void loop() {
-  digitalWrite(PIN_LIGHT, HIGH);
-  delay(1000);
-  digitalWrite(PIN_LIGHT, LOW);   
-  delay(1000);
+//  digitalWrite(PIN_LIGHT, HIGH);
+//  digitalWrite(PIN_LED, HIGH);
+  LcdClear();
+  LcdWrite(LCD_C, 0b01000010);
+  LcdString("[HelloWorld]");
+//  delay(30);
+//  digitalWrite(PIN_LIGHT, LOW);
+//  digitalWrite(PIN_LED, LOW);
+//  delay(30);
 }
